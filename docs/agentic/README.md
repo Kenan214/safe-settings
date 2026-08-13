@@ -26,7 +26,7 @@ stacked on this design branch:
 
 | Feature | What it does | Where it lives |
 | --- | --- | --- |
-| 1. Scheduled normalization workflow | A [GitHub Agentic Workflow](https://github.com/github/gh-aw) (`gh-aw`), run on a schedule, that scans an admin repo's configs, detects consolidation opportunities across **all** plugin types, and opens a PR proposing the change. | Template + docs an org admin installs into **their own** admin repo (safe-settings itself is tooling, not a specific org's admin repo). |
+| 1. [Scheduled normalization workflow](scheduled-normalization-workflow.md) | A [GitHub Agentic Workflow](https://github.com/github/gh-aw) (`gh-aw`), run on a schedule, that scans an admin repo's configs, detects consolidation opportunities across **all** plugin types, and opens a PR proposing the change. | Template + docs an org admin installs into **their own** admin repo (safe-settings itself is tooling, not a specific org's admin repo). |
 | 2. In-app Copilot SDK PR check | An advisory-only addition to safe-settings' existing PR dry-run check that flags consolidation opportunities in the configs a PR is adding/changing, plus a `/safe-settings consolidate` comment command that opens a follow-up PR on demand. | Ships as part of the safe-settings Probot app itself (`index.js`, `lib/`). |
 
 ## Why two features instead of one
@@ -106,7 +106,7 @@ main-enterprise
 
 See the per-feature docs once those branches land:
 
-- Feature 1: `docs/agentic/scheduled-normalization-workflow.md` (added on
-  `feature/gh-aw-scheduled-normalization`)
+- Feature 1: [`docs/agentic/scheduled-normalization-workflow.md`](scheduled-normalization-workflow.md)
+  (added on `feature/gh-aw-scheduled-normalization`)
 - Feature 2: `docs/agentic/copilot-sdk-pr-check.md` (added on
   `feature/copilot-sdk-pr-check`)
