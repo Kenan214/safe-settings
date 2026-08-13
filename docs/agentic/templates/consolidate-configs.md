@@ -6,14 +6,29 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  # Recommended Copilot auth: mint inference tokens from the built-in Actions
+  # token instead of requiring a COPILOT_GITHUB_TOKEN PAT secret. Requires
+  # your org to have centralized Copilot billing enabled — see
+  # https://github.github.io/gh-aw/reference/auth/#copilot-requests-write-permission
+  copilot-requests: write
+# Explicit least-privilege network policy: this workflow only reads local
+# YAML files and never needs outbound network access beyond gh-aw/GitHub's
+# own basic infrastructure domains.
+network: defaults
 tools:
   bash: ["find", "cat", "ls", "grep", "wc", "sort", "uniq", "head", "tail", "yq", "echo", "printf"]
+  # Required for the agent to actually relocate/dedupe YAML content — bash
+  # alone only covers read-only inspection commands above.
+  edit:
 safe-outputs:
   create-pull-request:
     title-prefix: "[safe-settings consolidate] "
     labels: ["agentic-normalization"]
     draft: true # gh-aw enforces draft PRs for create-pull-request regardless; set explicitly for clarity
     if-no-changes: ignore # most runs will find nothing to consolidate — don't open empty/noisy PRs
+  missing-tool: # let the agent report gracefully if it needs a capability it wasn't granted
+  noop: # let the agent explicitly no-op (with a reason) when there's nothing safe to consolidate
+timeout-minutes: 20
 ---
 
 # Safe-settings config consolidation scan
@@ -148,8 +163,18 @@ independently.
 
 If you find at least one safe, verified consolidation opportunity, make the
 minimal file edits (moving/deduplicating YAML — do not reformat or reorder
-unrelated content) and open a pull request. If you find nothing, do not open
-a PR — just end the run.
+unrelated content) and open a pull request.
+
+If you find nothing to consolidate this run (the common case), **do not**
+silently end the run — call the `noop` tool with a brief explanation of what
+you checked (e.g. "scanned N repo overrides and M suborgs; no duplicated or
+relocatable entries found"). This keeps a visible, auditable record of every
+run, not just the ones that produced a PR.
+
+If you're missing information or a capability you'd need to safely evaluate
+a potential opportunity (for example, a config file you can't parse, or a
+matcher you can't resolve with the tools available), call `missing-tool`
+explaining what you needed instead of guessing.
 
 The PR body **must** follow this structure:
 
@@ -176,3 +201,12 @@ verify the dry-run check below shows no diff before merging._
 Fill in the real pattern, before/after YAML snippets, and safety reasoning —
 do not leave the placeholders unfilled. Mention which repos/suborgs are
 affected so a human reviewer can double check your matcher reasoning quickly.
+
+## Permission boundary (important)
+
+This workflow must never approve, merge, or self-review any pull request —
+including PRs it creates itself or PRs created by other agentic workflows. It
+has no write access to pull request reviews. Do not attempt to call
+`gh pr review`, approve reviews via the GitHub API, or merge pull requests
+under any circumstances. Your job ends at opening a draft PR for a human (and
+safe-settings' own dry-run check) to review.

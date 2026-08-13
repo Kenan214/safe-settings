@@ -76,23 +76,56 @@ this workflow:
 - Your admin repo must be set up for `gh-aw` (`gh aw init`, if not already
   done) — this sets up the Actions workflow scaffolding gh-aw needs.
 - Copilot engine auth. This template omits `engine:` since Copilot is
-  gh-aw's default engine. It runs as GitHub Actions using your org/repo's
-  Copilot access; see the
-  [gh-aw engines reference](https://github.github.io/gh-aw/reference/engines/)
-  for authentication details for your setup (personal Copilot access via a
-  PAT/`COPILOT_GITHUB_TOKEN`, or centralized org Copilot billing with
-  `permissions.copilot-requests: write` — the compiler will print a tip
-  about this option if you haven't set it).
-- Repo permissions: the workflow's agent job only needs `contents: read` (it
-  reads YAML files already checked out into the workflow's own repo). The
-  separate, permission-scoped `safe-outputs` job that gh-aw generates needs
+  gh-aw's default engine. It uses the **recommended, token-free** auth path:
+  `permissions.copilot-requests: write` in the frontmatter, which mints
+  Copilot inference tokens from the built-in GitHub Actions token
+  (`${{ github.token }}`) — no PAT or repository secret to manage, and
+  billing flows through your org's centralized Copilot subscription. This
+  requires your org to have centralized Copilot billing enabled; if it
+  doesn't, fall back to a `COPILOT_GITHUB_TOKEN` PAT secret instead (drop the
+  `copilot-requests: write` permission and follow the
+  [PAT-based setup](https://github.github.io/gh-aw/reference/auth/#copilot_github_token)
+  in the gh-aw auth reference).
+- Repo permissions: the workflow's agent job only needs `contents: read`
+  (plus `copilot-requests: write` above — it reads YAML files already
+  checked out into the workflow's own repo). The separate,
+  permission-scoped `safe-outputs` job that gh-aw generates needs
   `contents: write` and `pull-requests: write` to push the branch and open
   the PR — this is handled automatically by the `create-pull-request` safe
   output; you don't need to add these permissions yourself.
 - No extra secrets are required beyond what `gh aw init`/`gh aw compile`
   already wires up for the Copilot engine in your repo/org.
 
+## Design notes / best practices this template follows
+
+- **`permissions.copilot-requests: write`** for token-free, org-billed
+  Copilot auth (see Prerequisites above), instead of requiring a
+  `COPILOT_GITHUB_TOKEN` PAT secret.
+- **`network: defaults`** — an explicit, least-privilege network policy.
+  This workflow only reads local YAML files and never needs outbound network
+  access beyond gh-aw's basic infrastructure allowlist (this is also the
+  implicit default when `network:` is omitted, but declaring it explicitly
+  documents the intent and matches gh-aw's recommended posture).
+- **`tools.edit`** is explicitly enabled alongside `tools.bash` — the agent
+  needs real file-editing capability to relocate/dedupe YAML content, not
+  just the read-only shell commands (`find`, `cat`, `grep`, `yq`, etc.) used
+  to inspect the configs.
+- **`safe-outputs.missing-tool`** and **`safe-outputs.noop`** are declared
+  explicitly, and the workflow's instructions tell the agent to call `noop`
+  (with a brief explanation) on every run that finds nothing to consolidate,
+  rather than silently exiting — this keeps a visible, auditable record in
+  `gh aw logs`/`gh aw status` for every scheduled run, not just the ones that
+  open a PR.
+- A **permission boundary** section in the instructions explicitly forbids
+  the agent from approving, merging, or self-reviewing any pull request
+  (including its own) — its job ends at opening a draft PR for a human (and
+  safe-settings' dry-run check) to review.
+- `timeout-minutes: 20` is set explicitly (matches gh-aw's own default, but
+  stated for clarity — increase it if your admin repo's config set is large
+  enough that a scan needs more time).
+
 ## Install steps
+
 
 1. Install the `gh-aw` extension and initialize your admin repo, if you
    haven't already:
@@ -160,6 +193,12 @@ When the workflow opens a consolidation PR:
   and use this template in your own admin repo, since the CLI is only needed
   locally to compile/validate; the compiled lock file is what actually runs
   in GitHub Actions.
+- Its frontmatter/conventions were also cross-checked against a working,
+  modern reference gh-aw workflow
+  ([`lantern-sandbox/gh-aw-experimental`'s `daily-docs-sync.md`](https://github.com/lantern-sandbox/gh-aw-experimental/blob/main/.github/workflows/daily-docs-sync.md)),
+  which is how the `copilot-requests: write`, `network: defaults`,
+  `tools.edit`, explicit `noop`/`missing-tool`, and permission-boundary
+  practices listed above were identified and adopted.
 - There is intentionally no bundled Node.js/JS parsing script for detecting
   duplication — the Copilot engine reads the raw YAML files directly in the
   agent job and reasons about patterns itself, per this feature's product
