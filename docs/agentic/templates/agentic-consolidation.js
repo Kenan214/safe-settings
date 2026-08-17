@@ -260,12 +260,25 @@ function postComment (body) {
 }
 
 async function advisory () {
-  const changed = gh('api', `repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100`, '--paginate', '--jq', '.[].filename')
-    .split('\n')
-    .filter(Boolean)
-    .filter(isConfigFile)
+  // The files API can transiently return an empty list right after a PR is
+  // reopened (GitHub recomputing PR state), even though the workflow's paths
+  // filter just matched a config change — retry briefly before giving up.
+  let changed = []
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    changed = gh('api', `repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100`, '--paginate', '--jq', '.[].filename')
+      .split('\n')
+      .filter(Boolean)
+      .filter(isConfigFile)
+    if (changed.length > 0) {
+      break
+    }
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 5000))
+    }
+  }
 
   if (changed.length === 0) {
+    warn('the PR reported no changed config files (after retries); skipping analysis')
     summary('No safe-settings config files changed; nothing to analyze.')
     return
   }
