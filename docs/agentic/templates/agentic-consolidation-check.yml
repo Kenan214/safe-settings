@@ -30,7 +30,10 @@ permissions:
 jobs:
   advisory:
     name: advisory
-    if: github.event_name == 'pull_request'
+    # Skip the bot's own consolidation patch PRs — advising on them is noise.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !startsWith(github.event.pull_request.head.ref, 'agentic-normalization/')
     runs-on: ubuntu-latest
     concurrency:
       group: agentic-consolidation-advisory-${{ github.event.pull_request.number }}
