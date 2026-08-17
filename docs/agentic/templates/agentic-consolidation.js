@@ -112,6 +112,29 @@ function isConfigFile (file) {
   )
 }
 
+/**
+ * All config files in the checked-out workspace, ordered org settings ->
+ * suborgs -> repos so the higher scopes survive the context budget first.
+ */
+function listAllConfigFiles () {
+  const files = []
+  const settings = path.posix.join(CONFIG_PATH, SETTINGS_FILE_PATH)
+  if (fs.existsSync(settings)) {
+    files.push(settings)
+  }
+  for (const dir of ['suborgs', 'repos']) {
+    const full = path.posix.join(CONFIG_PATH, dir)
+    if (fs.existsSync(full)) {
+      for (const name of fs.readdirSync(full).sort()) {
+        if (/\.ya?ml$/.test(name)) {
+          files.push(path.posix.join(full, name))
+        }
+      }
+    }
+  }
+  return files
+}
+
 function readWorkspaceFiles (paths) {
   return paths.map((p) => {
     let content = ''
@@ -147,6 +170,12 @@ motivating (non-exhaustive) examples:
    could instead be defined once at the org level.
 
 Generalize this reasoning across ALL plugin types listed above.
+
+You are given the files this pull request CHANGED, plus the repository's
+other config files for context (duplication is usually across files, e.g. a
+changed repo config versus an unchanged suborg config). Only report
+opportunities that involve at least one CHANGED file — this check is scoped
+to what this PR is introducing, not a full audit.
 
 Respond with ONLY a JSON object (no prose, no markdown fences) matching:
 {
@@ -227,8 +256,36 @@ async function advisory () {
     return
   }
 
-  const files = readWorkspaceFiles(changed)
-  const prompt = `${ANALYSIS_INSTRUCTIONS}\n\nHere are the changed config files in this pull request:\n\n${renderFileBlock(files)}\n`
+  const changedFiles = readWorkspaceFiles(changed)
+
+  // Include the rest of the config set as context (higher scopes first),
+  // within a character budget so huge admin repos still fit one prompt.
+  const contextBudget = parseInt(process.env.CONTEXT_BUDGET_CHARS || '200000', 10)
+  let used = 0
+  const contextFiles = []
+  for (const file of listAllConfigFiles()) {
+    if (changed.includes(file)) {
+      continue
+    }
+    const [entry] = readWorkspaceFiles([file])
+    if (used + entry.content.length > contextBudget) {
+      warn(`context budget reached; omitting ${file} and later files from the prompt`)
+      break
+    }
+    used += entry.content.length
+    contextFiles.push(entry)
+  }
+
+  const prompt = `${ANALYSIS_INSTRUCTIONS}
+
+Here are the config files CHANGED by this pull request:
+
+${renderFileBlock(changedFiles)}
+
+Here are the repository's other (unchanged) config files, for context:
+
+${renderFileBlock(contextFiles)}
+`
   const response = await runCopilotPrompt(prompt)
   const parsed = parseJsonFromResponse(response)
   if (!parsed || !Array.isArray(parsed.findings)) {

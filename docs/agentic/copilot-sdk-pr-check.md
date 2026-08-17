@@ -34,11 +34,15 @@ Two reasons for the Actions architecture:
 **On every PR that touches config files** (`.github/settings.yml`,
 `.github/repos/**`, `.github/suborgs/**`):
 
-1. Checks out the PR head and reads the changed config files from disk.
+1. Checks out the PR head and reads the changed config files from disk,
+   plus the rest of the config set (org settings and suborgs first, within a
+   character budget) as context — duplication is usually *across* files,
+   e.g. a changed repo config versus an unchanged suborg config.
 2. Makes one tool-less Copilot SDK call asking for "consolidation
    opportunities" — duplication that could be relocated to a higher scope
    (repo → suborg → org) without changing the effective merged settings —
-   generalized across every safe-settings plugin type.
+   generalized across every safe-settings plugin type, and scoped to
+   findings that involve at least one changed file.
 3. Writes the findings to the job's step summary, and (if there are any)
    posts/updates a single advisory PR comment describing each finding
    (pattern, before/after, why it's safe) with the findings embedded in a
@@ -91,6 +95,7 @@ Environment variables on the workflow steps (all optional):
 | `SETTINGS_FILE_PATH` | `settings.yml` | Org settings file name; match your App deployment. |
 | `COPILOT_MODEL` | `gpt-5` | Model for both the analysis and authoring calls. |
 | `COPILOT_TIMEOUT_MS` | `240000` | Hard timeout on each SDK call. |
+| `CONTEXT_BUDGET_CHARS` | `200000` | Cap on unchanged-config context included in the analysis prompt. |
 
 ## Safety
 
