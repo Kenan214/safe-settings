@@ -43,11 +43,13 @@ Two reasons for the Actions architecture:
    (repo → suborg → org) without changing the effective merged settings —
    generalized across every safe-settings plugin type, and scoped to
    findings that involve at least one changed file.
-3. Writes the findings to the job's step summary, and (if there are any)
-   posts/updates a single advisory PR comment describing each finding
-   (pattern, before/after, why it's safe) with the findings embedded in a
-   machine-readable marker. The job itself always succeeds — analysis errors
-   are logged as warnings, never as a red ✗ on the PR.
+3. Writes the findings to the job's step summary and posts/updates a single
+   advisory PR comment — either describing each finding (pattern,
+   before/after, why it's safe) or explicitly stating that nothing was
+   found, so a clean result is visible on the PR and stale findings are
+   cleared. The findings travel in a machine-readable marker in that
+   comment. The job itself always succeeds — analysis errors are logged as
+   warnings, never as a red ✗ on the PR.
 
 **On a `/safe-settings consolidate` comment** (from an `OWNER`/`MEMBER`/
 `COLLABORATOR` on a PR):

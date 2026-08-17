@@ -309,24 +309,41 @@ ${renderFileBlock(contextFiles)}
   }
 
   const findings = parsed.findings
+  const marker = `${FINDINGS_MARKER}${Buffer.from(JSON.stringify(findings), 'utf8').toString('base64')} -->`
+  let headSha = ''
+  try {
+    headSha = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')).pull_request.head.sha.slice(0, 7)
+  } catch (e) {
+    // sha in the comment is nice-to-have only
+  }
+  const analyzed = `Analyzed ${changed.length} changed config file(s)${headSha ? ` as of ${headSha}` : ''}`
+
+  // Always upsert the one advisory comment — an explicit "nothing found"
+  // state makes a clean result visible on the PR and clears any stale
+  // findings so the consolidate command can't act on outdated analysis.
   if (findings.length === 0) {
-    summary(`Analyzed ${changed.length} changed config file(s); no consolidation opportunities found.`)
+    summary(`${analyzed}; no consolidation opportunities found.`)
+    upsertAdvisoryComment(`#### :robot: Agentic config normalization
+
+${analyzed}; no consolidation opportunities found.
+
+${marker}`)
     return
   }
 
   const sections = findings.map(renderFinding).join('\n---\n')
   summary(`## ${findings.length} consolidation opportunit${findings.length === 1 ? 'y' : 'ies'} detected\n\n${sections}`)
 
-  const marker = `${FINDINGS_MARKER}${Buffer.from(JSON.stringify(findings), 'utf8').toString('base64')} -->`
-  const body = `#### :robot: Agentic config normalization: consolidation opportunities detected
+  upsertAdvisoryComment(`#### :robot: Agentic config normalization: consolidation opportunities detected
+
+${analyzed}.
 
 ${sections}
 
 _This is advisory only — this job always succeeds and does not affect the safe-settings dry-run check._
 _An owner, member, or collaborator can comment \`/safe-settings consolidate\` to open a follow-up PR proposing these changes._
 
-${marker}`
-  upsertAdvisoryComment(body)
+${marker}`)
 }
 
 async function consolidate () {
@@ -344,6 +361,13 @@ reopen the PR) so the advisory check runs, then try \`/safe-settings consolidate
 
   const encoded = commentWithFindings.body.split(FINDINGS_MARKER)[1].split('-->')[0].trim()
   const findings = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
+  if (!Array.isArray(findings) || findings.length === 0) {
+    postComment(`#### :robot: Agentic config normalization
+
+The latest analysis found no consolidation opportunities on this PR, so
+there is nothing to consolidate.`)
+    return
+  }
 
   const pr = JSON.parse(gh('api', `repos/${REPO}/pulls/${PR_NUMBER}`))
   const headSha = pr.head.sha
