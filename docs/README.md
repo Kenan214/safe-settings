@@ -10,3 +10,9 @@
 | Configure deployment environments | [Deployment Environments](github-settings/6.%20deployment-environments.md) |
 | Configure auto-link references | [AutoLinks](github-settings/7.%20autolinks.md) |
 | Configure pre-defined labels for issues and pull requests | [Labels](github-settings/8.%20labels.md) |
+
+## Agentic config normalization
+
+Optional, agentic tooling for consolidating duplicated config across
+org/suborg/repo scopes — a scheduled normalization workflow and a PR-time
+consolidation check. See [Agentic Config Normalization](agentic/README.md).
