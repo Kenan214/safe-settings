@@ -347,11 +347,14 @@ reopen the PR) so the advisory check runs, then try \`/safe-settings consolidate
 
   const pr = JSON.parse(gh('api', `repos/${REPO}/pulls/${PR_NUMBER}`))
   const headSha = pr.head.sha
-  const baseBranch = pr.base.ref
 
-  // Supersede flow: branch from the source PR's head so the follow-up PR
-  // carries the intended change plus the consolidation. See the docs for the
-  // matching dry-run acceptance gate.
+  // Stacked "patch PR" flow: target the source PR's own branch, so a human
+  // merges the consolidation into their PR — the bot never rewrites a branch
+  // meant to merge to the default branch. If the source PR is already
+  // merged/closed, fall back to its base branch; the consolidation then
+  // stands alone and must be zero-diff. See the docs for the acceptance gate.
+  const stacked = pr.state === 'open'
+  const baseBranch = stacked ? pr.head.ref : pr.base.ref
   git('fetch', 'origin', `pull/${PR_NUMBER}/head`)
   const branch = `agentic-normalization/consolidate-pr-${PR_NUMBER}-${RUN_ID}`
   git('checkout', '-b', branch, headSha)
@@ -396,15 +399,21 @@ ${f.after || ''}
 
 **Why this is safe:** ${f.whySafe || ''}`)
 
+  const relation = stacked
+    ? `Stacked on #${PR_NUMBER}: this PR targets that PR's branch (\`${baseBranch}\`).
+Merging it folds the consolidation into #${PR_NUMBER}, whose own dry-run
+check must be **unchanged** by this merge (the consolidation only relocates
+config); #${PR_NUMBER} then merges to \`${pr.base.ref}\` as usual.`
+    : `Follow-up to #${PR_NUMBER} (no longer open), targeting \`${baseBranch}\`.
+As a pure consolidation of existing config, the dry-run check on this PR
+must show **zero diff**.`
+
   const prBody = `${bodySections.join('\n\n---\n\n')}
 
-Supersedes #${PR_NUMBER}: this PR carries that PR's intended change expressed
-at the consolidated scope. If #${PR_NUMBER} is still open, close it in favor
-of this one.
+${relation}
 
 _Opened automatically by safe-settings' agentic config normalization. Please
-verify the dry-run check on this PR before merging (zero diff if #${PR_NUMBER}
-was already merged; otherwise identical to #${PR_NUMBER}'s dry-run diff)._`
+verify the dry-run acceptance gate above before merging._`
 
   const bodyFile = path.join(os.tmpdir(), `agentic-consolidation-body-${RUN_ID}.md`)
   fs.writeFileSync(bodyFile, prBody)

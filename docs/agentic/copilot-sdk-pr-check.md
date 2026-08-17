@@ -56,21 +56,24 @@ Two reasons for the Actions architecture:
    are found, replies asking the user to push a commit to re-run analysis.
 2. Makes a second tool-less SDK call to author the full updated file
    contents that remove the duplication.
-3. Creates a branch **from the source PR's head** and opens a follow-up PR
-   against the default branch, labeled `agentic-normalization`, using the
-   shared PR body template, and links it from the source PR.
+3. Creates a branch from the source PR's head and opens a **stacked patch
+   PR targeting the source PR's own branch**, labeled
+   `agentic-normalization`, using the shared PR body template, and links it
+   from the source PR.
 
-Branching from the PR head implements the **supersede flow**: the follow-up
-PR carries the source PR's intended change *plus* the consolidation, so the
-source PR can be closed in its favor. The acceptance gate is safe-settings'
-own dry-run check, which runs on the follow-up PR automatically (the
-safe-settings App receives its webhooks regardless of the PR having been
-created by `GITHUB_TOKEN`):
+The stacked patch PR means the bot never rewrites a branch that's meant to
+merge to the default branch: the small consolidation diff is proposed *onto*
+the source PR, and a human merges it. The acceptance gate is safe-settings'
+own dry-run check (the App receives its webhooks regardless of the PR having
+been created by `GITHUB_TOKEN`):
 
-- Source PR still open → the follow-up PR's dry-run must show **exactly the
-  same effective changes** as the source PR's dry-run.
-- Source PR already merged → the follow-up PR's dry-run must show **zero
-  diff**.
+- Source PR still open → merging the patch PR folds the consolidation into
+  the source PR, whose dry-run must be **unchanged** by that merge — the
+  consolidation only relocates config; the intended change stays intact.
+  The source PR then merges to the default branch as usual.
+- Source PR already merged/closed → the patch PR targets the source PR's
+  base branch instead and stands alone; as a pure consolidation of existing
+  config, its dry-run must show **zero diff**.
 
 ## Requirements
 
@@ -127,6 +130,6 @@ Environment variables on the workflow steps (all optional):
    `suborgrepos` glob. The "Agentic Consolidation / advisory" job should
    post an advisory comment within about a minute of the run starting.
 3. Comment `/safe-settings consolidate` on the PR. The "consolidate" job
-   opens the follow-up PR and links it.
-4. Check the follow-up PR's `Safe-setting validator` dry-run against the
-   acceptance gate above before merging.
+   opens a stacked patch PR against your PR's branch and links it.
+4. Merge the patch PR into your PR, confirm your PR's `Safe-setting
+   validator` dry-run is unchanged, then merge your PR as usual.

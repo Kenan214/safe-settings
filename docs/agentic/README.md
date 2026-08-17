@@ -74,11 +74,12 @@ automatically and is the acceptance gate:
 - **Post-merge consolidation** (Feature 1, or Feature 2 on a merged PR): the
   dry-run on the consolidation PR must show **zero diff** — the config is
   already applied, so a pure relocation changes nothing.
-- **Supersede flow** (Feature 2 on an open PR): the consolidation PR
-  *replaces* the source PR, expressing the same intended change at a higher
-  scope. Its dry-run must show **exactly the same effective changes** as the
-  source PR's dry-run — nothing more. The source PR should be closed in
-  favor of the consolidation PR.
+- **Stacked patch flow** (Feature 2 on an open PR): the consolidation PR
+  targets the *source PR's branch*, so a human merges the small
+  consolidation diff into their own PR — a bot never rewrites a branch
+  that's meant to merge to the default branch. The source PR's dry-run must
+  be **unchanged** by that merge: the consolidation only relocates config,
+  leaving the effective changes the source PR proposed intact.
 
 Reviewers should treat any unexplained dry-run diff on one of these PRs as a
 sign the proposed consolidation was incorrect.
@@ -140,7 +141,7 @@ restarts.
 
 ## Branch / PR stack
 
-```
+```text
 main-enterprise
  └─ kenan214/agentic-config-normalization        (design + Feature 2)
      └─ feature/gh-aw-scheduled-normalization     (Feature 1)
