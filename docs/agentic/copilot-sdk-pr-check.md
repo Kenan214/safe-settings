@@ -34,7 +34,7 @@ Two reasons for the Actions architecture:
 **On every PR that touches config files** (`.github/settings.yml`,
 `.github/repos/**`, `.github/suborgs/**`):
 
-1. Checks out the PR head and reads the changed config files from disk,
+1. Checks out the PR merge ref and reads the changed config files from disk,
    plus the rest of the config set (org settings and suborgs first, within a
    character budget) as context — duplication is usually *across* files,
    e.g. a changed repo config versus an unchanged suborg config.
@@ -93,7 +93,7 @@ Environment variables on the workflow steps (all optional):
 | --- | --- | --- |
 | `CONFIG_PATH` | `.github` | Where configs live in the admin repo; match your App deployment's `CONFIG_PATH`. |
 | `SETTINGS_FILE_PATH` | `settings.yml` | Org settings file name; match your App deployment. |
-| `COPILOT_MODEL` | `gpt-5` | Model for both the analysis and authoring calls. |
+| `COPILOT_MODEL` | Copilot CLI default | Model for both the analysis and authoring calls; leave unset unless you have a reason. On "model not available" errors the job log lists the models your billing plan offers. |
 | `COPILOT_TIMEOUT_MS` | `240000` | Hard timeout on each SDK call. |
 | `CONTEXT_BUDGET_CHARS` | `200000` | Cap on unchanged-config context included in the analysis prompt. |
 

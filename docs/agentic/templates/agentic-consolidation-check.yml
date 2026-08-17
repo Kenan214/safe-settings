@@ -36,9 +36,9 @@ jobs:
       group: agentic-consolidation-advisory-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
+      # Default checkout on pull_request is the PR merge ref: the analysis sees
+      # the post-merge config state and the script always runs from latest main.
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

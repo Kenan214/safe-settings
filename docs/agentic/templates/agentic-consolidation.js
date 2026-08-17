@@ -25,7 +25,7 @@ const path = require('node:path')
 
 const CONFIG_PATH = process.env.CONFIG_PATH || '.github'
 const SETTINGS_FILE_PATH = process.env.SETTINGS_FILE_PATH || 'settings.yml'
-const MODEL = process.env.COPILOT_MODEL || 'gpt-5'
+const MODEL = process.env.COPILOT_MODEL || ''
 const TIMEOUT_MS = parseInt(process.env.COPILOT_TIMEOUT_MS || '240000', 10)
 const REPO = process.env.GITHUB_REPOSITORY
 const PR_NUMBER = process.env.PR_NUMBER
@@ -63,7 +63,21 @@ async function runCopilotPrompt (prompt) {
   await client.start()
   let session
   try {
-    session = await client.createSession({ model: MODEL, availableTools: [] })
+    const config = { availableTools: [] }
+    if (MODEL) {
+      config.model = MODEL
+    }
+    try {
+      session = await client.createSession(config)
+    } catch (e) {
+      try {
+        const models = await client.listModels()
+        warn(`available models: ${models.map((m) => m.id || m.name).join(', ')}`)
+      } catch (listErr) {
+        // listing models is best-effort diagnostics only
+      }
+      throw e
+    }
     const reply = await session.sendAndWait({ prompt }, TIMEOUT_MS)
     return reply?.data?.content || ''
   } finally {
