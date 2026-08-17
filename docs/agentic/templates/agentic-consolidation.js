@@ -97,9 +97,11 @@ function parseJsonFromResponse (text) {
     return null
   }
   const attempts = [text.trim()]
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  if (fenced) {
-    attempts.push(fenced[1].trim())
+  // The response may reason first and can contain multiple fenced blocks
+  // (e.g. yaml snippets); the JSON answer is instructed to come last.
+  const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)]
+  for (const match of fenced.reverse()) {
+    attempts.push(match[1].trim())
   }
   const first = text.indexOf('{')
   const last = text.lastIndexOf('}')
@@ -191,7 +193,20 @@ changed repo config versus an unchanged suborg config). Only report
 opportunities that involve at least one CHANGED file — this check is scoped
 to what this PR is introducing, not a full audit.
 
-Respond with ONLY a JSON object (no prose, no markdown fences) matching:
+Work through this checklist for EVERY changed file before answering:
+1. For a changed repos/<name>.yml: check every suborg config whose
+   suborgrepos globs match <name>. Any team, ruleset, branch protection,
+   label, environment, variable, collaborator, autolink, or custom property
+   in the changed file that an applicable suborg (or the org settings file)
+   already declares with the same effective value IS a finding.
+2. For a changed suborgs/*.yml: check the org settings file the same way,
+   and check sibling suborgs for identical definitions that could move to
+   the org level.
+3. For the changed org settings file: check whether it makes existing
+   suborg/repo-level declarations redundant.
+
+Reason step by step through the checklist first. Then end your response
+with a fenced \`\`\`json code block containing ONLY a JSON object matching:
 {
   "findings": [
     {
@@ -205,7 +220,7 @@ Respond with ONLY a JSON object (no prose, no markdown fences) matching:
     }
   ]
 }
-If there are no consolidation opportunities, respond with {"findings": []}.`
+If there are no consolidation opportunities, end with {"findings": []}.`
 
 const AUTHOR_INSTRUCTIONS = `You previously detected consolidation opportunities in a "safe-settings"
 config repository (see findings below). Now produce the FULL, updated
@@ -322,6 +337,10 @@ ${renderFileBlock(contextFiles)}
   }
 
   const findings = parsed.findings
+  console.log(`model returned ${findings.length} finding(s)`)
+  if (findings.length === 0) {
+    console.log(`model response (truncated): ${response.slice(0, 1000)}`)
+  }
   const marker = `${FINDINGS_MARKER}${Buffer.from(JSON.stringify(findings), 'utf8').toString('base64')} -->`
   let headSha = ''
   try {
