@@ -404,16 +404,37 @@ there is nothing to consolidate.`)
   const pr = JSON.parse(gh('api', `repos/${REPO}/pulls/${PR_NUMBER}`))
   const headSha = pr.head.sha
 
+  if (pr.state !== 'open' && !pr.merged) {
+    postComment(`#### :robot: Agentic config normalization
+
+This PR was closed without merging, so its findings no longer apply to the
+current config — there is nothing on \`${pr.base.ref}\` to consolidate
+against. Nothing to do here.`)
+    return
+  }
+
   // Stacked "patch PR" flow: target the source PR's own branch, so a human
   // merges the consolidation into their PR — the bot never rewrites a branch
   // meant to merge to the default branch. If the source PR is already
-  // merged/closed, fall back to its base branch; the consolidation then
-  // stands alone and must be zero-diff. See the docs for the acceptance gate.
+  // merged, fall back to its base branch; the consolidation then stands
+  // alone and must be zero-diff. See the docs for the acceptance gate.
   const stacked = pr.state === 'open'
   const baseBranch = stacked ? pr.head.ref : pr.base.ref
-  git('fetch', 'origin', `pull/${PR_NUMBER}/head`)
   const branch = `agentic-normalization/consolidate-pr-${PR_NUMBER}-${RUN_ID}`
-  git('checkout', '-b', branch, headSha)
+  if (stacked) {
+    git('fetch', 'origin', `pull/${PR_NUMBER}/head`)
+    git('checkout', '-b', branch, headSha)
+  } else {
+    // The fallback targets pr.base.ref directly, so branch from its current
+    // tip rather than the merged PR's headSha: under squash or rebase merge
+    // strategies headSha is never an ancestor of the base branch, and
+    // branching from it would carry the PR's entire original diff instead
+    // of just this structural relocation. This also means the model sees
+    // the base branch's current file contents, not the merged PR's old
+    // snapshot.
+    git('fetch', 'origin', pr.base.ref)
+    git('checkout', '-b', branch, 'FETCH_HEAD')
+  }
 
   const paths = [...new Set(findings.flatMap((f) => f.files || []))].filter(isConfigFile)
   const files = readWorkspaceFiles(paths)
