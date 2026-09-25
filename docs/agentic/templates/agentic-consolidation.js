@@ -34,6 +34,15 @@ const RUN_ID = process.env.GITHUB_RUN_ID || `${Date.now()}`
 const CONSOLIDATION_LABEL = 'agentic-normalization'
 const FINDINGS_MARKER = '<!-- agentic-consolidation-findings:'
 
+function encodeFindingsMarker (findings) {
+  return `${FINDINGS_MARKER}${Buffer.from(JSON.stringify(findings), 'utf8').toString('base64')} -->`
+}
+
+function decodeFindingsMarker (body) {
+  const encoded = body.split(FINDINGS_MARKER)[1].split('-->')[0].trim()
+  return JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
+}
+
 function run (cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...opts })
 }
@@ -368,7 +377,7 @@ ${renderFileBlock(contextFiles)}
   if (findings.length === 0) {
     console.log(`model response (truncated): ${response.slice(0, 1000)}`)
   }
-  const marker = `${FINDINGS_MARKER}${Buffer.from(JSON.stringify(findings), 'utf8').toString('base64')} -->`
+  const marker = encodeFindingsMarker(findings)
   let headSha = ''
   try {
     headSha = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')).pull_request.head.sha.slice(0, 7)
@@ -420,8 +429,7 @@ reopen the PR) so the advisory check runs, then try \`/safe-settings consolidate
 
   let findings
   try {
-    const encoded = commentWithFindings.body.split(FINDINGS_MARKER)[1].split('-->')[0].trim()
-    findings = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
+    findings = decodeFindingsMarker(commentWithFindings.body)
   } catch (e) {
     postComment(`#### :robot: Agentic config normalization
 
@@ -568,7 +576,19 @@ async function main () {
   }
 }
 
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+}
+
+module.exports = {
+  isConfigFile,
+  isBotComment,
+  parseJsonFromResponse,
+  encodeFindingsMarker,
+  decodeFindingsMarker,
+  FINDINGS_MARKER,
+  BOT_LOGIN
+}
