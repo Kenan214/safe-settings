@@ -258,7 +258,7 @@ ${f.after || ''}
 }
 
 function listPrComments () {
-  return JSON.parse(gh('api', `repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100`))
+  return JSON.parse(gh('api', `repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100`, '--paginate'))
 }
 
 function upsertAdvisoryComment (body) {
@@ -391,8 +391,18 @@ reopen the PR) so the advisory check runs, then try \`/safe-settings consolidate
     return
   }
 
-  const encoded = commentWithFindings.body.split(FINDINGS_MARKER)[1].split('-->')[0].trim()
-  const findings = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
+  let findings
+  try {
+    const encoded = commentWithFindings.body.split(FINDINGS_MARKER)[1].split('-->')[0].trim()
+    findings = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
+  } catch (e) {
+    postComment(`#### :robot: Agentic config normalization
+
+The consolidation findings recorded on this PR could not be read (the marker
+is missing or corrupted: ${e.message}). Push a new commit (or reopen the PR)
+so the advisory check re-runs, then try \`/safe-settings consolidate\` again.`)
+    return
+  }
   if (!Array.isArray(findings) || findings.length === 0) {
     postComment(`#### :robot: Agentic config normalization
 
@@ -449,6 +459,9 @@ against. Nothing to do here.`)
   for (const change of authored.changes) {
     if (!isConfigFile(change.path)) {
       throw new Error(`model proposed a change outside the config paths: ${change.path}`)
+    }
+    if (typeof change.content !== 'string' || change.content.length === 0) {
+      throw new Error(`model proposed an empty change for: ${change.path}`)
     }
     fs.mkdirSync(path.dirname(change.path), { recursive: true })
     fs.writeFileSync(change.path, change.content)

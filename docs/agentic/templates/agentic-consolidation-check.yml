@@ -56,6 +56,7 @@ jobs:
           # SETTINGS_FILE_PATH: settings.yml
           # COPILOT_MODEL: gpt-5
           # COPILOT_TIMEOUT_MS: '240000'
+          # CONTEXT_BUDGET_CHARS: '200000'
         run: node .github/scripts/agentic-consolidation.js advisory
 
   consolidate:
@@ -81,4 +82,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.issue.number }}
+          # Optional overrides; must match the advisory step and your App deployment.
+          # CONFIG_PATH: .github
+          # SETTINGS_FILE_PATH: settings.yml
+          # COPILOT_MODEL: gpt-5
+          # COPILOT_TIMEOUT_MS: '240000'
+          # CONTEXT_BUDGET_CHARS: '200000'
         run: node .github/scripts/agentic-consolidation.js consolidate
