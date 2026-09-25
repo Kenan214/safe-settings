@@ -1,0 +1,91 @@
+# Agentic consolidation check for a safe-settings ADMIN repo.
+#
+# Install (into the admin repo, not the safe-settings app repo):
+#   - this file            -> .github/workflows/agentic-consolidation-check.yml
+#   - the companion script -> .github/scripts/agentic-consolidation.js
+#
+# Requirements: the org has a Copilot subscription with centralized billing
+# enabled, so the built-in GITHUB_TOKEN can carry `copilot-requests: write`.
+# No PAT and no changes to the safe-settings App deployment are needed.
+#
+# See docs/agentic/copilot-sdk-pr-check.md in the safe-settings repo.
+
+name: Agentic Consolidation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/settings.yml'
+      - '.github/repos/**'
+      - '.github/suborgs/**'
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  copilot-requests: write
+
+jobs:
+  advisory:
+    name: advisory
+    # Skip the bot's own consolidation patch PRs — advising on them is noise.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !startsWith(github.event.pull_request.head.ref, 'agentic-normalization/')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: agentic-consolidation-advisory-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      # Default checkout on pull_request is the PR merge ref: the analysis sees
+      # the post-merge config state and the script always runs from latest main.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Copilot SDK
+        run: npm install --no-save --no-audit --no-fund @github/copilot-sdk@1.0.9
+      - name: Analyze changed configs (single-shot, advisory)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Optional overrides; defaults match a standard safe-settings deployment.
+          # CONFIG_PATH: .github
+          # SETTINGS_FILE_PATH: settings.yml
+          # COPILOT_MODEL: gpt-5
+          # COPILOT_TIMEOUT_MS: '240000'
+          # CONTEXT_BUDGET_CHARS: '200000'
+        run: node .github/scripts/agentic-consolidation.js advisory
+
+  consolidate:
+    name: consolidate
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/safe-settings consolidate') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: agentic-consolidation-consolidate-${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Copilot SDK
+        run: npm install --no-save --no-audit --no-fund @github/copilot-sdk@1.0.9
+      - name: Author and open the consolidation PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          # Optional overrides; must match the advisory step and your App deployment.
+          # CONFIG_PATH: .github
+          # SETTINGS_FILE_PATH: settings.yml
+          # COPILOT_MODEL: gpt-5
+          # COPILOT_TIMEOUT_MS: '240000'
+          # CONTEXT_BUDGET_CHARS: '200000'
+        run: node .github/scripts/agentic-consolidation.js consolidate
