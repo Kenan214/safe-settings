@@ -119,13 +119,31 @@ function parseJsonFromResponse (text) {
 }
 
 function isConfigFile (file) {
+  if (typeof file !== 'string') {
+    return false
+  }
+  // Reject path traversal: model-authored paths must never escape the config
+  // tree via `..` segments.
+  if (file.split('/').includes('..')) {
+    return false
+  }
   if (file === path.posix.join(CONFIG_PATH, SETTINGS_FILE_PATH)) {
     return true
   }
-  return (
-    (file.startsWith(`${CONFIG_PATH}/repos/`) || file.startsWith(`${CONFIG_PATH}/suborgs/`)) &&
-    /\.ya?ml$/.test(file)
-  )
+  // Mirror the app's own matching rules (lib/settings.js REPO_PATTERN /
+  // SUB_ORG_PATTERN): `<config>/repos/*.yml` and `<config>/suborgs/*.yml` —
+  // `.yml` only, exactly one level deep. Anything else is never loaded by the
+  // app, so the dry-run gate cannot vouch for changes to it.
+  for (const dir of ['repos', 'suborgs']) {
+    const prefix = `${CONFIG_PATH}/${dir}/`
+    if (file.startsWith(prefix)) {
+      const rest = file.slice(prefix.length)
+      if (rest && !rest.includes('/') && rest.endsWith('.yml')) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 /**
@@ -257,12 +275,21 @@ ${f.after || ''}
 `
 }
 
+// Comments posted by this workflow come from the Actions bot identity, so the
+// findings marker is only trusted there — any commenter could otherwise forge
+// a marker and steer the consolidate step.
+const BOT_LOGIN = 'github-actions[bot]'
+
+function isBotComment (c) {
+  return !!c && !!c.user && c.user.login === BOT_LOGIN
+}
+
 function listPrComments () {
   return JSON.parse(gh('api', `repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100`, '--paginate'))
 }
 
 function upsertAdvisoryComment (body) {
-  const existing = listPrComments().find((c) => (c.body || '').includes(FINDINGS_MARKER))
+  const existing = listPrComments().find((c) => isBotComment(c) && (c.body || '').includes(FINDINGS_MARKER))
   if (existing) {
     gh('api', '--method', 'PATCH', `repos/${REPO}/issues/comments/${existing.id}`, '-f', `body=${body}`)
   } else {
@@ -381,7 +408,7 @@ ${marker}`)
 async function consolidate () {
   const commentWithFindings = listPrComments()
     .reverse()
-    .find((c) => (c.body || '').includes(FINDINGS_MARKER))
+    .find((c) => isBotComment(c) && (c.body || '').includes(FINDINGS_MARKER))
 
   if (!commentWithFindings) {
     postComment(`#### :robot: Agentic config normalization
